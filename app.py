@@ -96,11 +96,6 @@ st.markdown("""
     color:#c13d78; font-size:12px; font-weight:800; position:relative; z-index:2;
 }
 
-.upload-card {
-    border:1px solid #f3c6df; border-radius:24px; padding:24px;
-    background:linear-gradient(135deg,rgba(255,238,248,.94),rgba(247,239,255,.90));
-    box-shadow:0 12px 32px rgba(217,100,162,.10);
-}
 .upload-title { font-size:22px; font-weight:900; color:#3c2d48; margin-bottom:4px; }
 .upload-description { color:#89798f; font-size:14px; line-height:1.6; margin-bottom:15px; }
 
@@ -174,14 +169,20 @@ h1,h2,h3 { color:#44324f; }
 </style>
 """, unsafe_allow_html=True)
 
+FOOTER = (
+    '<div class="footer">IVA Vision Lab • Viola-Jones • FaceNet • '
+    'Template Matching • DeepFace</div>'
+)
 
-@st.cache_resource
+
+# ---------------- Model / helper functions ----------------
+@st.cache_resource(show_spinner=False)
 def load_facenet():
     from keras_facenet import FaceNet
     return FaceNet()
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_face_cascade():
     return cv2.CascadeClassifier(
         cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -190,9 +191,13 @@ def load_face_cascade():
 
 def detect_faces(image_bgr, scale_factor, min_neighbors):
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    return load_face_cascade().detectMultiScale(
-        gray, scaleFactor=scale_factor, minNeighbors=min_neighbors, minSize=(30, 30)
+    faces = load_face_cascade().detectMultiScale(
+        gray,
+        scaleFactor=scale_factor,
+        minNeighbors=min_neighbors,
+        minSize=(30, 30),
     )
+    return faces if len(faces) else np.empty((0, 4), dtype=int)
 
 
 def draw_face_boxes(image_bgr, faces):
@@ -202,7 +207,7 @@ def draw_face_boxes(image_bgr, faces):
         cv2.rectangle(output, (x, y), (x + w, y + h), box_color, 3)
         cv2.putText(
             output, f"Face {i}", (x, max(y - 10, 20)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2,
         )
     return cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
 
@@ -215,6 +220,7 @@ def get_embeddings(image_bgr, faces):
         if face.size == 0:
             continue
         face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+        face_rgb = cv2.resize(face_rgb, (160, 160))  # FaceNet input size
         embeddings.append(model.embeddings([face_rgb])[0])
     return embeddings
 
@@ -248,15 +254,12 @@ def run_deepface(image_bgr):
 
     try:
         cv2.imwrite(path, image_bgr)
-
         result = DeepFace.analyze(
             img_path=path,
             actions=["age", "gender", "emotion"],
             enforce_detection=False,
         )
-
         return result[0] if isinstance(result, list) else result
-
     finally:
         if os.path.exists(path):
             os.remove(path)
@@ -276,7 +279,7 @@ with st.sidebar:
 
     st.markdown(
         '<div class="sidebar-section">⚙️ Analysis Controls</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     scale_factor = st.slider("Face detection scale", 1.05, 1.30, 1.10, 0.05)
@@ -287,7 +290,7 @@ with st.sidebar:
 
     st.markdown(
         '<div class="sidebar-section">🧩 Pipeline</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     st.markdown("""
@@ -321,12 +324,11 @@ left, right = st.columns([2.15, 0.85], gap="large")
 
 with left:
     st.markdown("""
-    <div class="upload-card">
-        <div class="upload-title">📤 Upload Main Image</div>
-        <div class="upload-description">
-            Choose a clear image to begin your AI computer vision analysis.
-            <br>Supported formats: JPG, JPEG, PNG.
-        </div>
+    <div class="upload-title">📤 Upload Main Image</div>
+    <div class="upload-description">
+        Choose a clear image to begin your AI computer vision analysis.
+        <br>Supported formats: JPG, JPEG, PNG.
+    </div>
     """, unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader(
@@ -334,8 +336,6 @@ with left:
         type=["jpg", "jpeg", "png"],
         help="Upload the image you want IVA Vision Lab to analyze.",
     )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
     st.markdown("""
@@ -364,15 +364,18 @@ if uploaded_file is None:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown(
-        '<div class="footer">IVA Vision Lab • Viola-Jones • FaceNet • Template Matching • DeepFace</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(FOOTER, unsafe_allow_html=True)
     st.stop()
 
 
 # ---------------- Image preparation ----------------
 pil_image = Image.open(uploaded_file).convert("RGB")
+
+# Downscale very large images to keep memory usage low on free hosting
+MAX_SIDE = 1600
+if max(pil_image.size) > MAX_SIDE:
+    pil_image.thumbnail((MAX_SIDE, MAX_SIDE))
+
 image_bgr = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 faces = detect_faces(image_bgr, scale_factor, min_neighbors)
 
@@ -401,12 +404,12 @@ with tabs[0]:
     a, b = st.columns([2, 1])
 
     with a:
-        st.image(pil_image, caption="Uploaded source image", use_container_width=True)
+        st.image(pil_image, caption="Uploaded source image", width="stretch")
 
     with b:
         st.markdown(
             '<div class="result-card"><div class="small-label">Pipeline Status</div>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
         st.write("✅ Image loaded")
         st.write(f"🎯 {len(faces)} face(s) detected")
@@ -421,7 +424,7 @@ with tabs[0]:
         st.image(
             draw_face_boxes(image_bgr, faces),
             caption="All detected faces",
-            use_container_width=True
+            width="stretch",
         )
     else:
         st.warning("No face was detected in the uploaded image.")
@@ -440,7 +443,7 @@ with tabs[1]:
             st.image(
                 draw_face_boxes(image_bgr, faces),
                 caption="Viola-Jones bounding boxes",
-                use_container_width=True
+                width="stretch",
             )
 
         with b:
@@ -449,11 +452,7 @@ with tabs[1]:
                 {"Face": i, "X": int(x), "Y": int(y), "Width": int(w), "Height": int(h)}
                 for i, (x, y, w, h) in enumerate(faces, 1)
             ]
-            st.dataframe(
-                pd.DataFrame(rows),
-                hide_index=True,
-                use_container_width=True
-            )
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
 
 # ---------------- FaceNet ----------------
@@ -463,29 +462,29 @@ with tabs[2]:
     if not len(faces):
         st.warning("FaceNet needs at least one detected face.")
     else:
-        with st.spinner("Generating FaceNet embeddings..."):
-            embeddings = get_embeddings(image_bgr, faces)
+        try:
+            with st.spinner("Generating FaceNet embeddings (first run downloads the model)..."):
+                embeddings = get_embeddings(image_bgr, faces)
 
-        st.success(f"Generated {len(embeddings)} embedding(s).")
+            st.success(f"Generated {len(embeddings)} embedding(s).")
 
-        for i, embedding in enumerate(embeddings, 1):
-            with st.expander(f"Face {i} — {len(embedding)} dimensions", expanded=True):
-                x, y = st.columns(2)
-                x.metric("Embedding dimension", len(embedding))
-                y.metric("Vector norm", f"{float(np.linalg.norm(embedding)):.4f}")
+            for i, embedding in enumerate(embeddings, 1):
+                with st.expander(f"Face {i} — {len(embedding)} dimensions", expanded=True):
+                    m1, m2 = st.columns(2)
+                    m1.metric("Embedding dimension", len(embedding))
+                    m2.metric("Vector norm", f"{float(np.linalg.norm(embedding)):.4f}")
 
-                if show_embedding:
-                    df = pd.DataFrame({
-                        "Index": np.arange(1, min(11, len(embedding) + 1)),
-                        "Value": embedding[:10],
-                    })
-                    st.dataframe(
-                        df,
-                        hide_index=True,
-                        use_container_width=True
-                    )
-                else:
-                    st.info("Enable 'Show FaceNet vector' in the sidebar.")
+                    if show_embedding:
+                        df = pd.DataFrame({
+                            "Index": np.arange(1, min(11, len(embedding) + 1)),
+                            "Value": np.asarray(embedding[:10], dtype=float),
+                        })
+                        st.dataframe(df, hide_index=True, width="stretch")
+                    else:
+                        st.info("Enable 'Show FaceNet vector' in the sidebar.")
+        except Exception as exc:
+            st.error("FaceNet could not generate embeddings.")
+            st.exception(exc)
 
 
 # ---------------- Template Matching ----------------
@@ -515,16 +514,14 @@ with tabs[3]:
                 st.image(
                     result["image"],
                     caption="Best template location",
-                    use_container_width=True
+                    width="stretch",
                 )
 
             with b:
                 score = result["score"]
                 st.metric("Matching score", f"{score:.3f}")
                 st.write(f"Location: {result['location']}")
-                st.write(
-                    f"Template size: {result['size'][0]} × {result['size'][1]}"
-                )
+                st.write(f"Template size: {result['size'][0]} × {result['size'][1]}")
 
                 if score >= 0.70:
                     st.success("Strong match")
@@ -538,9 +535,9 @@ with tabs[3]:
 with tabs[4]:
     st.subheader("🙂 DeepFace Facial Analysis")
 
-    if st.button("Run DeepFace Analysis", type="primary", use_container_width=True):
+    if st.button("Run DeepFace Analysis", type="primary", width="stretch"):
         try:
-            with st.spinner("DeepFace is analyzing the image..."):
+            with st.spinner("DeepFace is analyzing the image (first run downloads models)..."):
                 analysis = run_deepface(image_bgr)
 
             a, b, c = st.columns(3)
@@ -548,7 +545,7 @@ with tabs[4]:
             b.metric("Gender", analysis.get("dominant_gender", "N/A"))
             c.metric("Dominant emotion", analysis.get("dominant_emotion", "N/A"))
 
-            scores = analysis.get("emotion", {})
+            scores = {k: float(v) for k, v in analysis.get("emotion", {}).items()}
 
             if scores:
                 st.markdown("### Emotion Score Distribution")
@@ -562,7 +559,7 @@ with tabs[4]:
 
                 st.markdown("### Raw Analysis")
                 st.json({
-                    "age": analysis.get("age"),
+                    "age": int(analysis["age"]) if analysis.get("age") is not None else None,
                     "gender": analysis.get("dominant_gender"),
                     "dominant_emotion": analysis.get("dominant_emotion"),
                     "emotion_scores": scores,
@@ -576,7 +573,4 @@ with tabs[4]:
 
 
 st.divider()
-st.markdown(
-    '<div class="footer">IVA Vision Lab • Viola-Jones • FaceNet • Template Matching • DeepFace</div>',
-    unsafe_allow_html=True
-)
+st.markdown(FOOTER, unsafe_allow_html=True)streamlit run app.py
