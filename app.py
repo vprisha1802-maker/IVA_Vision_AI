@@ -177,6 +177,7 @@ h1,h2,h3 { color:#44324f; }
 
 @st.cache_resource
 def load_facenet():
+    from keras_facenet import FaceNet
     return FaceNet()
 
 
@@ -239,17 +240,23 @@ def template_match(main_bgr, template_bgr):
 
 
 def run_deepface(image_bgr):
+    from deepface import DeepFace
+
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
     path = temp.name
     temp.close()
+
     try:
         cv2.imwrite(path, image_bgr)
+
         result = DeepFace.analyze(
             img_path=path,
             actions=["age", "gender", "emotion"],
             enforce_detection=False,
         )
+
         return result[0] if isinstance(result, list) else result
+
     finally:
         if os.path.exists(path):
             os.remove(path)
