@@ -1,4 +1,9 @@
 import os
+
+# Must be set BEFORE importing TensorFlow/Keras-based libraries
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import tempfile
 
 import cv2
