@@ -573,4 +573,4 @@ with tabs[4]:
 
 
 st.divider()
-st.markdown(FOOTER, unsafe_allow_html=True)streamlit run app.py
+st.markdown(FOOTER, unsafe_allow_html=True)
