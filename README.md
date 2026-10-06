@@ -126,7 +126,7 @@ The application performs multiple computer vision and deep learning operations o
 
 🚀 **Streamlit Application:**
 
-[Click here to open the IVA Image Analysis System](YOUR_STREAMLIT_APP_LINK)
+[Click here to open the IVA Image Analysis System](https://ivavisionlab.streamlit.app/)
 
 > Replace `YOUR_STREAMLIT_APP_LINK` with your actual Streamlit deployment URL.
 
